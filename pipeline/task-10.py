@@ -29,9 +29,11 @@ POOL_DEPTH = 10                      # candidates per method and request in the 
 N_NER_EPOCHS = 10                    # training the NER model on the checked labels
 JUDGE_MODEL = "Qwen/Qwen3-14B"       # relevance judge (Apache-2.0), 4-bit on a GPU; Task 5's model without one
 OUT_DIR = "/kaggle/working" if os.path.isdir("/kaggle/working") else "."
-# The author's files (annotation_checked.csv, topic_ratings_A.csv): the attached Kaggle dataset that has them.
+# The author's files (annotation_checked.csv, topic_ratings_A.csv): the attached Kaggle dataset that has them,
+# else the repository's annotations/ folder (when run from the repository root), else OUT_DIR.
+_REPO_ANNOTATIONS = "annotations" if os.path.isfile(os.path.join("annotations", "annotation_checked.csv")) else OUT_DIR
 ANNOTATION_DIR = next((root for root, _, files in os.walk("/kaggle/input") if "annotation_checked.csv" in files),
-                      OUT_DIR)
+                      _REPO_ANNOTATIONS)
 
 
 def filled(name):

@@ -1,214 +1,191 @@
-# Project 29: Contextual Preference Extraction from Food Reviews
+<div align="center">
 
-NLP pipeline for a food recommender that extracts **who** likes/dislikes **what**, under **which circumstances**, from Food.com reviews (HUMMUS dataset).
+# 🥗 Contextual Preference Extraction from Food Reviews
 
-Example input:
+**Who likes what, and when?**<br/>
+An NLP pipeline that turns Food.com reviews into *holder-aware* and *context-aware* preference tuples,<br/>
+then uses them for recipe recommendation and evidence-grounded explanations.
 
-> "I love spicy food, but this was too hot for my children. Great for weekend dinners, but too time-consuming for weekdays."
+[![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![spaCy](https://img.shields.io/badge/spaCy-NER%20%26%20parsing-09A3D5?logo=spacy&logoColor=white)](https://spacy.io/)
+[![Transformers](https://img.shields.io/badge/Transformers-DeBERTa%20%2B%20Qwen3-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/docs/transformers)
+[![Kaggle](https://img.shields.io/badge/Runs%20on-Kaggle-20BEFF?logo=kaggle&logoColor=white)](https://www.kaggle.com/)
+[![Dataset](https://img.shields.io/badge/Data-HUMMUS%20%28RecSys%202023%29-8A2BE2)](https://doi.org/10.1145/3604915.3609491)
+[![Tasks](https://img.shields.io/badge/Tasks-10%2F10%20done-2EA44F)](#-the-ten-tasks)
 
-Expected output (holder, aspect, sentiment, context, evidence span):
+[Overview](#-overview) · [Pipeline](#-pipeline) · [Key results](#-key-results) · [Quickstart](#-quickstart) · [Layout](#-repository-layout) · [Task notes](docs/TASKS.md) · [Credits](#-credits)
 
-| Holder   | Aspect          | Sentiment | Context  |
-|----------|-----------------|-----------|----------|
-| reviewer | spicy food      | positive  | general  |
-| children | spiciness       | negative  | general  |
-| reviewer | suitability     | positive  | weekend  |
-| reviewer | preparation time| negative  | weekdays |
+</div>
 
-The research question is whether preserving the **holder** and **condition** prevents incorrect generalisation in user profiles and improves recommendation and explanation accuracy.
+> [!NOTE]
+> This project was created by **[Raiyan Ahmed (@notraiyan)](https://github.com/notraiyan)** in [notraiyan/hummus-dataset](https://github.com/notraiyan/hummus-dataset). This repository is a reorganised copy kept by [@Imran5002](https://github.com/Imran5002), with the original commit history preserved. The research, code and results are the original author's.
 
-## Dataset
+---
 
-HUMMUS (Bölz et al., RecSys 2023), loaded from Kaggle (`raiyanahmed/hummus`) via `kagglehub`:
+## 🔎 Overview
 
-- `pp_reviews.csv`: review `text`, `rating`, `last_modified_date`, member and recipe ids.
-- `pp_recipes.csv`: structured attributes (duration, ingredients, tags, nutrition, healthiness scores).
-- `pp_members.csv`: member metadata.
+A review rarely speaks for one person in one situation. Recommenders that treat every opinion as the reviewer's own, true at all times, build the wrong profile.
 
-Dataset caveats that affect the analysis:
+> *"I love spicy food, but this was too hot for my children. Great for weekend dinners, but too time-consuming for weekdays."*
 
-- Authorship is added as pseudo-reviews with rating `6` and no text.
-- Reviews without a rating are set to `2.5`. Only ratings 1-5 are real stars.
-- Use only historical reviews (by `last_modified_date`) when building profiles for evaluation. There is no separate submission date, and an edit moves this date later, so a chronological split is approximate.
-- Food.com data is for educational and scientific use only.
+| Holder | Aspect | Sentiment | Context |
+|:--|:--|:--:|:--|
+| reviewer | spicy food | 🟢 positive | general |
+| **children** | spiciness | 🔴 negative | general |
+| reviewer | suitability | 🟢 positive | **weekend** |
+| reviewer | preparation time | 🔴 negative | **weekdays** |
 
-## Files
+Each preference is stored as **(holder, aspect, sentiment, context, evidence span)**, so the children's dislike never becomes the reviewer's, and "too slow on weekdays" never becomes "too slow".
 
-| File              | Purpose                                                        |
-|-------------------|----------------------------------------------------------------|
-| `load-dataset.py` | Downloads and loads the three HUMMUS tables with `kagglehub`.  |
-| `task-1.py`       | Task 1: EDA and text preparation (needs `load-dataset.py` run first). |
-| `task-2.py`       | Task 2: NER for food and context (needs Tasks 1 and loader run first). |
-| `task-3.py`       | Task 3: topic modelling of cooking experiences. |
-| `task-4.py`       | Task 4: aspect-based sentiment analysis. |
-| `task-5.py`       | Task 5: preference-holder and relation extraction. |
-| `task-6.py`       | Task 6: negation and conditional preference detection. |
-| `task-7.py`       | Task 7: contextual user profile construction. |
-| `task-8.py`       | Task 8: context-aware recipe retrieval and recommendation. |
-| `task-9.py`       | Task 9: evidence-grounded summaries and explanations. |
-| `task-10.py`      | Task 10: annotation sheets, agreement, evaluation and the protocol's status. |
-| `ANNOTATION.md`   | Guidelines for the annotators and raters. |
-| `LITERATURE.md`   | Related work and the case for the project's novelty (a starting point; check every reference). |
-| `annotation_checked.csv` | LLM's pre-annotation of the 1,200 annotation reviews, checked and corrected by the author (clauses marked `checked` = y); the gold for Task 10. |
-| `topic_ratings_A.csv` | The author's interpretability ratings of Task 3's topics. These two are the only CSVs tracked in git; upload both to Kaggle for Task 10. |
+**Research question:** does preserving the *holder* and the *condition* prevent wrong generalisations in user profiles, and improve recommendation and explanation accuracy?
 
-## Setup
+## 🧭 Pipeline
 
-```bash
-pip install kagglehub pandas matplotlib seaborn nltk spacy scikit-learn bertopic gensim transformers torch sentencepiece bitsandbytes
-python task-1.py
+```mermaid
+flowchart TD
+    D[("HUMMUS · Food.com<br/>reviews + recipes")]
+
+    subgraph S1["① Understand the text"]
+        T1["Task 1<br/>EDA & clause splitting"]
+        T2["Task 2<br/>NER: food & context"]
+        T3["Task 3<br/>Topic modelling"]
+    end
+
+    subgraph S2["② Extract preferences"]
+        T4["Task 4<br/>Aspect-based sentiment"]
+        T5["Task 5<br/>Holder & context"]
+        T6["Task 6<br/>Negation & conditions"]
+    end
+
+    subgraph S3["③ Use them"]
+        T7["Task 7<br/>Contextual profiles"]
+        T8["Task 8<br/>Context-aware recommender"]
+        T9["Task 9<br/>Grounded explanations"]
+    end
+
+    T10{{"Task 10 · Annotation & evaluation<br/>1,200 reviews · 6,149 checked clauses"}}
+
+    D --> T1
+    T1 --> T2
+    T1 --> T3
+    T2 --> T4 --> T5 --> T6 --> T7 --> T8 --> T9
+    T10 -. scores .-> S2
+    T10 -. judges .-> T8
 ```
 
-Kaggle access may require credentials (see the `kagglehub` documentation). `task-1.py` downloads the NLTK tokenizer data on first run.
+### 📋 The ten tasks
 
-## Task status
+| # | Task | Approach | Status |
+|:-:|:--|:--|:--:|
+| 1 | [EDA & text preparation](docs/TASKS.md#task-1-details) | HTML cleaning, NLTK sentence and clause splitting before contrast words | ✅ |
+| 2 | [NER for food & context](docs/TASKS.md#task-2-details) | spaCy dictionary matcher vs a weakly supervised spaCy model vs `en_core_web_sm` | ✅ pilot |
+| 3 | [Topic modelling](docs/TASKS.md#task-3-details) | LDA vs NMF vs BERTopic on an "experience" vocabulary | ✅ |
+| 4 | [Aspect-based sentiment](docs/TASKS.md#task-4-details) | Cue lexicon + `deberta-v3-base-absa`, per clause, 7 aspects | ✅ pilot |
+| 5 | [Holder & relation extraction](docs/TASKS.md#task-5-details) | Dependency rules vs Qwen3-4B with a fixed JSON schema | ✅ pilot |
+| 6 | [Negation & conditions](docs/TASKS.md#task-6-details) | Negation scope, *if*-conditions and exceptions; 32-sentence challenge set | ✅ pilot |
+| 7 | [Contextual user profiles](docs/TASKS.md#task-7-details) | General vs context profiles, stable vs tentative, with evidence | ✅ pilot |
+| 8 | [Context-aware recommendation](docs/TASKS.md#task-8-details) | Content + collaborative filtering + contextual profile, chronological test | ✅ pilot |
+| 9 | [Grounded explanations](docs/TASKS.md#task-9-details) | Extractive / template vs LLM-generated, with automatic attribution checks | ✅ pilot |
+| 10 | [Annotation & evaluation](docs/TASKS.md#task-10-details) | Checked gold labels, P/R/F1, tuple F1, LLM-judged NDCG@10 | ✅ |
 
-| # | Task                                              | Status |
-|---|---------------------------------------------------|--------|
-| 1 | EDA and text preparation                          | Done   |
-| 2 | NER for food and context (dictionary vs. model)   | Done (pilot) |
-| 3 | Topic modelling (LDA, NMF, BERTopic)              | Done   |
-| 4 | Aspect-based sentiment analysis                   | Done (pilot) |
-| 5 | Holder and relation extraction                    | Done (pilot) |
-| 6 | Negation and conditional preference detection     | Done (pilot) |
-| 7 | Contextual user profile construction              | Done (pilot) |
-| 8 | Context-aware retrieval and recommendation        | Done (pilot) |
-| 9 | Evidence-grounded summaries and explanations      | Done (pilot) |
-| 10| Annotation and evaluation protocol                | Done |
+## 📊 Key results
 
-## Task 1 details
+*Kaggle run (GPU). Full numbers and caveats in the [status table](docs/TASKS.md#status-table).*
 
-1. Missing values for reviews, members and recipes; drops reviews without text (including authorship rows). Review text is cleaned of HTML: escaped characters are unescaped ("&#039;" to "'"), `<br/>` tags (some escaped) become line breaks and formatting tags are removed. Line breaks are kept, since 105k reviews use them instead of full stops.
-2. Review length (words) statistics and histogram.
-3. Rating distribution, reported separately for all rows and for explicit 1-5 star ratings.
-4. Frequency of contextual expressions (weekday, weekend, children, partner, guests, special occasion, time-constrained).
-5. Sentence and clause splitting with NLTK, line by line. Clauses are split **before** contrast words (`but`, `although`, `however`, `yet`, `though`), so contrast and negation words are kept. `df_clauses` keeps ids and a clause index for later evidence spans.
+**Does keeping holders and conditions help?**
 
-## Task 2 details
+| Where | Without holders & contexts | With them |
+|:--|:--|:--|
+| 👤 **Profiles** (Task 7) | 13 stable general preferences that members' own opinions don't support | not claimed |
+| 💬 **Explanations** (Task 9) | 12% of cited opinions credited to the wrong person | 0% |
+| 🍽️ **Recommendation** (Task 10, 10 requests) | NDCG@10 0.732 | NDCG@10 0.773 *(suggestive only)* |
 
-Run order in a Kaggle notebook (one cell per file, same session): `load-dataset.py`, `task-1.py`, `task-2.py`. spaCy and its pretrained `en_core_web_sm` are preinstalled on Kaggle (downloaded when missing, so keep internet on).
+**Component quality** on 6,149 checked clauses from 1,200 real reviews:
 
-- Labels: `INGREDIENT`, `DISH`, `COOKING_EQUIPMENT`, `DURATION`, `OCCASION`, `DINER_GROUP`.
-- **Dictionary NER:** spaCy `PhraseMatcher` over lexicons (frequent FoodKG ingredient names and dish phrases from recipe titles, plus hand-written equipment, occasion and diner-group lists) and a regex for durations. Overlaps keep the longest match.
-- **Domain-adapted NER:** the pretrained `en_core_web_sm` NER, fine-tuned with the six project labels on 20k review clauses labelled by the dictionary (weak supervision), so it keeps what it knows of English and can tag terms missing from the lexicons. Its own labels (PERSON, ORG, ...) are dropped from the output. The 200 pilot reviews are held out of training, and the frequency analysis uses clauses not seen in training. Training takes a few minutes on a CPU.
-- **From scratch:** a blank spaCy NER trained on the same clauses and labels, to show what the pretraining adds.
-- **General baseline:** `en_core_web_sm` as it comes, mapped to the project labels where possible (`TIME` to `DURATION`, `DATE`/`EVENT` to `OCCASION`); the brief's point that general-purpose NER needs extra labels or training for `OCCASION`, `DINER_GROUP` and `COOKING_EQUIPMENT` is what the comparison shows.
-- **Evaluation:** entity-level exact-match P/R/F1 on a small hand-written gold set (about 40 sentences, in `task-2.py`). This is a pilot only; extend it with the Task 10 annotations. The model is trained on dictionary labels, so a gain over the dictionary on gold reflects generalisation, not agreement with human annotation.
-- **Outputs** (in `/kaggle/working`, or the current folder locally): `hummus_ner_model/`, `task2_entities.csv` (entities with offsets, for later tasks), `task2_pilot_annotation.csv` (200 reviews for manual correction).
-- Meal times (breakfast, dinner) are not labelled as `OCCASION`; the holder ("I", "we") is left to Task 5.
+| Component | Result |
+|:--|:--|
+| Preference tuples (aspect, sentiment, holder, context, condition) | P 0.73 · R 0.54 · **F1 0.62** |
+| Aspect detection | P 0.89 · R 0.65 · F1 0.75 |
+| NER, model trained on checked labels | **F1 0.746**, vs 0.671 dictionary and 0.652 weakly supervised |
+| Topics | NMF most distinct (diversity 0.94) and rated most interpretable (2.67 / 3) |
+| Chronological recommendation (popularity-matched) | NDCG@10: combined **0.18** · CF 0.17 · popularity 0.14 · random ≈ 0.09 |
 
-## Task 3 details
+> [!IMPORTANT]
+> **Honest limits.** One annotator checked an LLM pre-annotation rather than labelling from scratch, so there is no inter-annotator agreement. Contextual matching was judged by an LLM (Qwen3-14B) on only 10 requests, with no significance test, and the content score alone ranked highest (0.849). The small hand-written test sets favour the systems; every score drops on real reviews.
 
-Run after `load-dataset.py` and `task-1.py` in the same session. The cell starts with `!pip install -q bertopic gensim`, so internet must be on (the MiniLM embedding model is also downloaded on first use); a GPU speeds up BERTopic. Outputs are written to `/kaggle/working`.
+## 🚀 Quickstart
 
-- **Corpus:** 50,000 random reviews with at least 8 words, the same sample for all three models. HTML, links and Food.com forum-game tags ("made for ZWT") are removed.
-- **Vocabulary:** an experience view. Stop words are scikit-learn's English list, generic praise and recipe boilerplate ("great", "recipe", "thanks"), units, and food words (the 1,500 most frequent FoodKG ingredient words and common dish nouns), so topics describe the cooking experience rather than the dish. Context words that also occur in food names are protected ("quick", "family", "party", "crock pot", "healthy"). Unigrams and bigrams, `min_df` 20, `max_df` 0.5.
-- **Methods:** LDA (counts), NMF (TF-IDF, KL divergence) and BERTopic (MiniLM embeddings of the original text, UMAP, KMeans instead of HDBSCAN so every review gets a topic, class-TF-IDF with frequent words reduced), all with 15 topics.
-- **Evaluation:** c_v and NPMI coherence (gensim, top 10 words, on the tokens the models see), topic diversity (unique share of the top 25 words), representative reviews per topic, and a seed-word check of which topic best matches each expected theme (quick meals, family cooking, meal preparation, celebrations, cooking difficulty; a reading aid, not validation).
-- **Human interpretation:** every topic, with its top words and example reviews, is exported for raters to label and score from 1 to 3 (see ANNOTATION.md); Task 10 reads the ratings. The author's ratings (`topic_ratings_A.csv`, one rater): NMF 2.67 (12 of 15 topics a clear theme), BERTopic 2.60 (10 of 15) and LDA 2.33 (6 of 15).
-- **Findings:** coherence is similar for the three models (c_v 0.53 for LDA, 0.50 for BERTopic and 0.49 for NMF; NPMI 0.077, 0.077 and 0.060), but NMF's topics are far more distinct (diversity 0.94, against 0.67 for LDA and 0.36 for BERTopic, whose topics share generic words such as "time", "little" and "instead") and the author rated them the most interpretable. BERTopic clusters the embeddings of the full review text, so several of its topics are dish types (cupcakes, scones, chowder, burgers) despite the experience vocabulary; LDA and NMF find experience themes such as quick and easy meals, family meals, substitutions and low-fat versions.
-- **Contrast:** NMF topics of recipe directions, to show that the experience themes come from reviews rather than recipes; the per-recipe topic mix is saved.
-- **Outputs:** `topic_scores_experience_vocab.csv` (coherence and diversity per model; Task 10 reads it), `topics_for_human_rating_experience_vocab.csv` (for raters) and `recipe_direction_topics.parquet`.
-- Topics are exploratory themes, not verified user attributes; they are not copied into user profiles.
+The pipeline is a **Kaggle notebook split into files**: each file in [`pipeline/`](pipeline) is one notebook cell. The cells share variables, so they run in order in the same session, and some start with `!pip install`, so they are not standalone scripts.
 
-## Task 4 details
+### On Kaggle (recommended)
 
-Run after the earlier cells in the same notebook (it uses `df_clauses`, `split_into_sentences`, `df_recipes`, Task 2's `LEXICONS` and earlier imports). Internet is needed to download the ABSA model; a GPU makes it faster.
+1. Create a new notebook. Under **Settings**, turn **Internet on** and set the accelerator to **GPU T4 x2**.
+2. Run everything from one cell:
 
-- **Aspects:** `TASTE`, `TEXTURE`, `PREP_EFFORT`, `TIME`, `INGREDIENT_AVAILABILITY`, `HEALTHINESS` (perceived, from the text only), and `SUITABILITY`: how well the recipe fits an occasion the clause names ("great for weekend dinners", "a hit at our Christmas party"), so that the brief's "Recipe → suitable for → weekend dinners" becomes a preference. It is found by a judgement word followed within a few words by one of Task 2's occasions; praise without an occasion and an occasion without a judgement ("made it for Christmas") are not fits.
-- **Sentiment per aspect per clause**, using Task 1's clauses (split before "but"), so "delicious but difficult" gives positive taste and negative effort. On the whole sentence, the model rates "difficult" positive; per clause it is negative.
-- **Aspect detection:** a cue lexicon (e.g. "bland", "mushy", "time consuming", "on hand", "healthy"). Generic praise ("great recipe") names no aspect and produces no row. Cues that are part of a product name before an ingredient ("heavy cream", "low fat cheese", "dry white wine") are skipped.
-- **Two sentiment methods:** a lexicon baseline (cue polarity, flipped by a negator in the three words before it; VADER for neutral cues such as "texture") and the pretrained ABSA model `yangheng/deberta-v3-base-absa-v1.1` (clause plus cue as the aspect term).
-- **Evaluation:** 45 hand-written reviews (aspect P/R/F1, aspect+sentiment F1, sentiment macro-F1), lexicon-model agreement (Cohen's kappa) and mean star rating per aspect sentiment on 5,000 real reviews.
-- **Perceived healthiness vs nutrition:** compared with the recipe's WHO, FSA and Nutri-Score (0-1, higher is healthier), but stored in separate columns and never combined.
-- **Outputs:** `task4_aspect_sentiments.csv` (one row per aspect mention with ids, clause, evidence offsets and both sentiments; Tasks 5 and 6 add holder and conditions to these rows) and `task4_pilot_annotation.csv` (the same 200 pilot reviews as Task 2).
-- Known limits: aspects without a cue are missed ("took me all afternoon", "melted in your mouth"); "I didn't have X so I used Y" is neutral for the model and negative for the lexicon; the model reads some occasion fits as neutral ("Perfect for a potluck"), so on the 45 hand-written reviews its sentiment macro-F1 is 0.87 against 0.97 for the lexicon.
+```python
+!git clone -q https://github.com/Imran5002/contextual-food-preferences.git
+%cd contextual-food-preferences
 
-## Task 5 details
+STEPS = ["load-dataset"] + [f"task-{i}" for i in range(1, 11)]
+for step in STEPS:
+    print(f"\n{'=' * 25} {step} {'=' * 25}")
+    get_ipython().run_cell(open(f"pipeline/{step}.py").read()).raise_error()  # stops at the first error
+```
 
-Run after the earlier cells in the same notebook (it uses `df_aspects` and `analyse` from Task 4, `df_clauses` and `split_into_sentences` from Task 1, and `OCCASIONS` and `plural_variants` from Task 2).
+Or paste each file into its own cell, in the same order. Outputs (CSVs, the NER model) are written to `/kaggle/working`. Task 10 reads the gold labels from [`annotations/`](annotations), or from an attached Kaggle dataset that contains `annotation_checked.csv`.
 
-- **Tuples:** each Task 4 aspect mention becomes `(holder, aspect, sentiment, context, evidence span)`. Aspect, sentiment and the evidence clause (with cue offsets) come from Task 4; this task adds the holder and the context.
-- **Holder:** `reviewer`, `children`, `partner`, `family` (the household as a group, "we", or other relatives), `guests`, or `unknown` when it cannot be told.
-- **Context:** the occasion the opinion is tied to, grouped from Task 2's occasion list: `weekday`, `weekend`, `holiday`, `gathering`, `special occasion`; `general` when none is named, `unknown` when a clause names two different ones.
-- **Dependency rules (spaCy `en_core_web_sm`):** an experiencer phrase on the opinion word ("too hot for my children", "spicy enough for my husband", "for my taste"), else the subject of the verb above it, climbing through complement clauses ("my husband said it was too salty", "the kids thought it was bland") but not through coordinated verbs. Effort, time and availability go to the reviewer (the cook) unless an experiencer is named. For taste, texture and healthiness, a person named in the clause but not linked to the opinion makes the holder `unknown`; for an occasion fit, people named are its audience ("great for a party with friends"), so it stays the reviewer's.
-- **LLM with a fixed output schema:** a free, open model, `Qwen/Qwen3-4B-Instruct-2507` (Apache-2.0, no account or key), run locally with `transformers`. One prompt per mention; the answer must be a JSON object `{"holder": ..., "context": ...}` using only the label lists, and anything else counts as a schema violation and becomes `unknown`. Greedy decoding, so results are repeatable. The model is downloaded once (8 GB, internet on); a GPU (Kaggle: Settings > Accelerator) is much faster. Without it, the rules alone produce the tuples.
-- **Evaluation:** holder accuracy and macro-F1, context accuracy and tuple accuracy (holder and context both right) on 40 hand-written reviews; on 40 real reviews, agreement and Cohen's kappa between rules and LLM. The gold set was written alongside the rules and includes cases they cannot solve ("they" referring back to the kids, "everyone" at a party).
-- **Output:** `task5_preference_tuples.csv` (one tuple per Task 4 mention, rule-based, with the LLM's labels where it ran).
+### Locally
 
-## Task 6 details
+```bash
+git clone https://github.com/Imran5002/contextual-food-preferences.git
+cd contextual-food-preferences
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+```
 
-Run after the earlier cells in the same notebook (it uses `df_tuples`, `mentions_for` and `nlp_dep` from Task 5, `CUE_INDEX` and `normalise` from Task 4, and `df_clauses` and `split_into_sentences` from Task 1).
+Then open Jupyter in the repository folder and run the same loop. `kagglehub` may need [Kaggle credentials](https://github.com/Kaggle/kagglehub), the LLM steps (Tasks 5, 9, 10) need a GPU to be practical, and Task 3 writes to `/kaggle/working` (create it, or change `OUT_DIR` in `task-3.py`).
 
-- **Negation scope (spaCy rules):** an opinion word is negated by a negator before it on the word itself or its degree word ("not too spicy"), on the words up to its verb ("wasn't bland", "don't like spicy food"), or on a verb of thinking above its clause ("I don't think it was bland"). Coordinated and subordinate clauses are out of scope ("I didn't add salt and it was bland", "because it was too spicy"), and so are lists ("not too sweet, and fluffy"), compounds ("no-fuss") and surprise ("I never thought I could get it this crispy").
-- **Sentiment:** Task 4's model sentiment, except that a cue with its own polarity is reversed when the negation is on the word, a noun it describes, a copula or linking verb, or a verb of thinking ("not too spicy" is positive; "not great for a weeknight" is negative). A negated verb of liking keeps the polarity ("I don't like things too spicy" stays negative), a negated comparative after "could" or "can" is praise ("couldn't have been easier"), and a cue with its own polarity keeps it when it is not negated and the model is unsure (probability below 0.5, as for a clause that is just "Difficult"). The model alone reads "not too spicy" and "never bland" as negative. The model's value is kept in `model_sentiment`.
-- **Contrast:** the clause starts with a contrast word (Task 1 splits clauses there).
-- **Condition:** an *if*-clause attached to the opinion ("quick to make if you use canned beans"), not indirect questions ("asked if...") or "even if".
-- **Exception:** "except/unless/other than ..." after the opinion word, or a following clause "but not at/for/when/if ..." that has no opinion of its own. Each exception adds a tuple with the opposite sentiment and the situation as its condition ("I enjoy spicy food, except at breakfast" gives positive in general and negative "at breakfast"). "except I left out the onions" (a change note) and "but not overly so" (a degree) are not exceptions.
-- **Challenge set:** 32 hand-written, manually checked sentences in minimal pairs (negation, negation scope, exceptions, conditions, contrasts), scored by whether every extracted `(aspect, sentiment, condition, negated)` preference matches. Some pairs come from failure patterns found in real reviews.
-- **Output:** `task6_preference_tuples.csv` (Task 5's tuples with `negated`, `negator`, `contrast`, `condition`, `condition_type` and `model_sentiment`, plus one row per exception).
+## 📁 Repository layout
 
-## Task 7 details
+```
+contextual-food-preferences/
+├── pipeline/                         # one notebook cell per file, run in order
+│   ├── load-dataset.py               # loads the three HUMMUS tables with kagglehub
+│   └── task-1.py … task-10.py        # Tasks 1–10
+├── annotations/
+│   ├── annotation_checked.csv        # gold labels: 6,149 clauses, all checked (Task 10)
+│   ├── annotation_checked_fixed.csv  # a later copy with 6 corrected cells
+│   └── topic_ratings_A.csv           # the author's interpretability ratings of Task 3's topics
+├── docs/
+│   ├── TASKS.md                      # design notes and findings for every task
+│   ├── ANNOTATION.md                 # annotation guidelines and decisions
+│   └── LITERATURE.md                 # related work and novelty argument
+└── requirements.txt
+```
 
-Run after the earlier cells in the same notebook (it uses `df_reviews` and `DATE_COL` from Task 1, `rules_label` from Task 5 and `preferences_for` from Task 6).
+## 🧾 Dataset
 
-- **Members:** Task 4 sampled random reviews, so most members appear once. This task runs the same extraction (Tasks 4-6) on the 30 most recent reviews of 200 members with at least 10 reviews.
-- **General profile:** the reviewer's own opinions with no occasion or condition. **Context profiles:** opinions held by someone else (children, partner, family, guests), or tied to an occasion (weekday, weekend, holiday, gathering, special occasion) or a condition ("if ...", "except ..."). Context opinions are never merged into the general profile, and opinions with an unknown holder are left out.
-- **Entries:** one per member, holder, scope and aspect, with the majority preference (likes, dislikes, mixed, neutral), counts, the number of recipes behind it, consistency, mean extraction confidence, the most common cue words, and up to three evidence spans (review id, clause, cue offsets, confidence).
-- **Stable vs tentative:** a preference is stable when it holds across at least two recipes with at least two-thirds agreement; a single comment stays tentative, since "too salty" is usually about that recipe.
-- **Confidence:** 0.9 where Task 6's negation rule set the sentiment (about 19 of 20 sampled reversals were right), otherwise Task 4's model probability (low where Task 6 overrode an unsure model).
-- **Check:** a profile that ignores holders and contexts is built for comparison; the script reports the stable general preferences it would wrongly claim (for example, a child's "yummy" turning into the reviewer's taste preference).
-- **Findings (Kaggle run):** 6,006 tuples from 4,366 reviews of 200 members give 1,172 profile entries; 62% of the general entries are stable. 385 tuples (6%) are kept out of the general profiles: by holder, family 104, unknown 100, partner 21, children 7 and guests 1; by scope, conditional 59, gathering 36, holiday 32, weekday 19, weekend 6 and special occasion 4. A holder- and context-blind profile would claim 13 stable general preferences that the members' own general opinions do not support; most come from opinions tied to an occasion ("Very easy to throw together right before a party.") or held by someone else (a child's "yummy").
-- **Outputs:** `task7_profiles.csv` (profile entries with evidence) and `task7_profile_tuples.csv` (every tuple with ids, date, holder, scope, confidence and evidence offsets). `build_profiles` can be rerun on tuples before a cut-off date for Task 8's chronological evaluation.
-- Profiles are per aspect, so "likes TASTE" is common and says little on its own; the cue words and evidence show what was liked.
+[**HUMMUS**](https://doi.org/10.1145/3604915.3609491) (Bölz et al., RecSys 2023) links Food.com recipes, ratings and review texts with nutrition and healthiness scores. It is loaded from Kaggle (`raiyanahmed/hummus`) with `kagglehub`:
 
-## Task 8 details
+- `pp_reviews.csv`: review text, rating, `last_modified_date`, member and recipe ids
+- `pp_recipes.csv`: duration, ingredients, tags, nutrition and healthiness scores
+- `pp_members.csv`: member metadata
 
-Run after the earlier cells in the same notebook (it uses `df_reviews` and `DATE_COL` from Task 1, `df_recipes`, Task 5's holder and occasion word lists, and `extract` from Task 7). About 3 minutes with a GPU.
+<details>
+<summary><b>Caveats that affect the analysis</b></summary>
 
-- **Requests:** "Recommend a quick dinner for my children." is parsed into a holder (Task 5's holder words: children), an occasion (Task 5's occasion list), and checkable constraints on structured attributes: "quick" means `duration` <= 30 minutes ("under N minutes" sets N), and a meal word requires a tag ("dinner" -> `main-dish`).
-- **Score:** recipes that pass the constraints are ranked by the sum of three standardised scores: content (TF-IDF of the request against the recipe's title and tags, without Food.com's tag-category headers), collaborative filtering (truncated SVD with 64 factors on 4-5 star reviews), and the relevant contextual profile (recipes that profile liked minus those it disliked, weighted by extraction confidence; the reviewer's general profile when that holder or occasion has no opinions). The weights are equal and untuned.
-- **Evaluation (chronological):** everything is built from reviews before the 90th-percentile date (2014-10-03). For 300 random members with at least 5 earlier reviews, their first 4-5 star recipe after the cut-off is ranked among 49 catalog recipes they never reviewed (catalog: at least 5 earlier reviews), sampled uniformly and in proportion to popularity. Nothing from the held-out review is used, so the request is context-free; Food.com does not record the request behind a review, so contextual matching is evaluated in Task 10 with authored requests. Metrics: NDCG@10 and Recall@10 (random Recall@10 = 0.2).
-- **Baselines:** popularity, CF alone, review embeddings (MiniLM; a member is the mean of their earlier reviews, a recipe is up to three earlier reviews by others), and the same extracted-fact profile built without holders and contexts, alone and in the combination.
-- **Findings (Kaggle run):** with uniform negatives popularity wins (NDCG@10 0.46), because the held-out recipes are mostly popular ones. With popularity-matched negatives, the combination ranks best (NDCG@10 0.18, against 0.17 for CF, 0.16 for the profiles, 0.14 for popularity, 0.13 for review embeddings and about 0.09 for random); the contextual and context-independent profiles score about the same (0.164 and 0.159), as expected for context-free requests. The differences are small and untested for significance.
-- **Output:** `task8_evaluation.csv` (rank of the held-out recipe per member, sampling scheme and method).
+- Recipe authorship appears as pseudo-reviews with rating `6` and no text.
+- Reviews without a rating are set to `2.5`; only ratings 1–5 are real stars.
+- There is no submission date, and an edit moves `last_modified_date` later, so a chronological split is approximate.
+- Food.com data is for educational and scientific use only.
 
-## Task 9 details
+</details>
 
-Run after the earlier cells in the same notebook (it uses Task 8's members, facts and recommender, Task 7's `build_profiles`, and Task 5's local LLM). About 2 minutes for the LLM part with a GPU.
+## 🙏 Credits
 
-- **Citable facts:** a member's profile entries (likes or dislikes), each with its holder, occasion or condition, how many recipes it rests on, and one verbatim quote from an earlier review (before Task 8's cut-off), numbered E1, E2, ... The recipe's structured record (time, steps, tags) is [R]. Every sentence must cite its sources.
-- **Profile summaries:** extractive (the quotes, labelled with holder and occasion) vs generated (Qwen3-4B from Task 5, given the same facts).
-- **Recommendation explanations** for a request matching the member's contexts (e.g. "Recommend a quick dinner for my children."): template ("You found lengthy preparation a problem on weekdays for one recipe ("...") [E1]. This recipe takes 20 minutes and has 6 steps [R].") vs generated (Qwen, same facts and record, told that the facts are about other recipes).
-- **Context-blind baseline:** the same template explanation for the same recipe, citing a profile built without holders and contexts (as in Task 7's check). Its checks use the holder, occasion and condition each quoted opinion really has, so they measure the attribution errors and lost conditions that keeping holders and contexts avoids.
-- **Automatic checks:** factual support (every sentence cites a source that exists; every number appears in the record or a cited quote), attribution (a cited opinion of someone else names them; anyone named is a cited holder or the person the request is for; a sentence about "you" does not rest only on someone else's opinions), and conditions (a cited occasion or condition is kept).
-- **Findings (15 members, Kaggle run):** extractive summaries and template explanations pass every check by construction but are longer (94 and 52 words, against 65 and 46 for the generated ones). Generated text cites a source in every sentence, but its incorrect-attribution rate is 0.40 for summaries and 0.19 for explanations (for example "You like the taste of recipes your partner makes", from the partner's opinion), and one generated explanation states a number in neither the record nor a quote ("within the 30-minute timeframe" for a 25-minute recipe). Reading the generated explanations also shows opinions about past recipes stated as facts about the new one. Before the prompt forbade it, about 12 of 15 did so ("your children will love the taste"); in the Kaggle run about 4 of 15 still do ("this soup avoids texture issues that might concern your guests", "meets your household's appreciation for tasty and healthy food"), and the checks cannot detect it automatically. About 4 of 15 also add recipe details that are not in the record ("designed for parties", "includes fresh cheese", "includes a note about adjusting spice for children", "uses common items available in most kitchens"). The context-blind template credits 4 of its 32 cited opinions (12%) to the wrong person, against none for the template that keeps holders and contexts; most facts a blind profile cites are still the reviewer's own, so the gap is modest for these members.
-- **Output:** `task9_outputs.csv` (each summary or explanation with its facts, review ids and checks).
+- **[Raiyan Ahmed (@notraiyan)](https://github.com/notraiyan)**: author of the project, code, annotations and results ([original repository](https://github.com/notraiyan/hummus-dataset)).
+- **[@zerintasnim800-bot](https://github.com/zerintasnim800-bot)**: contributed `annotation_checked_fixed.csv`.
+- **Dataset:** Bölz, F., et al. (2023). *HUMMUS: A linked, healthiness-aware, user-centered and argument-enabling recipe data set for recommendation.* RecSys 2023. [doi:10.1145/3604915.3609491](https://doi.org/10.1145/3604915.3609491)
+- **Models:** [`yangheng/deberta-v3-base-absa-v1.1`](https://huggingface.co/yangheng/deberta-v3-base-absa-v1.1), [`Qwen/Qwen3-4B-Instruct-2507`](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) and Qwen3-14B (Apache-2.0), spaCy `en_core_web_sm`, MiniLM sentence embeddings.
 
-## Task 10 details
-
-Run after the earlier cells in the same notebook. The annotators' guidelines are in [ANNOTATION.md](ANNOTATION.md). On Kaggle, attach the dataset with `annotation_checked.csv` and `topic_ratings_A.csv` (Task 10 finds it under `/kaggle/input` by itself), turn internet on and use the "GPU T4 x2" accelerator. `load-dataset.py` installs `bitsandbytes` for the relevance judge, before `transformers` is first imported.
-
-- **Annotation:** `annotation_sheet.csv` holds the 200-review pilot (the reviews of the Task 2 and Task 4 pilot sheets) and 1,000 further reviews, one row per clause (6,149 clauses). They were pre-annotated by LLM, following ANNOTATION.md: entities, and opinions with aspect, sentiment, holder, context, condition and negation, spans written as text. They were labelled in 24 batches of 50 reviews; where batches decided the same case differently, the case was settled once in ANNOTATION.md's Decisions and applied to all (104 clauses changed). When Task 1 was fixed to clean HTML and split at line breaks, the labels were carried over to the new clauses, and the 118 new clause pieces were labelled the same way. When `SUITABILITY` was added, the 175 clauses that mention an occasion were relabelled for it. After the author's check, the labels hold 5,607 entities and 2,297 opinions (TASTE 977, TEXTURE 411, PREP_EFFORT 386, TIME 191, INGREDIENT_AVAILABILITY 179, SUITABILITY 77, HEALTHINESS 76). 94% of opinions are the reviewer's own; 47 carry a condition or exception, and 112 an occasion.
-- **Checking:** the author checks and corrects the pre-annotation in `annotation_checked.csv` (a copy with the full review for context) and marks each checked clause `y`. Task 10 uses only checked clauses as gold and scores the system on them: NER precision, recall and F1 (dictionary and model), aspect detection, sentiment, condition and negation macro-F1, and tuple-level F1. It also trains a domain-adapted NER model on the checked main-set clauses and compares it with the dictionary and Task 2's model (trained on dictionary labels) on the checked pilot clauses, which Task 2 held out of training. The brief's double annotation and agreement are not done: there is one annotator, who corrected the pre-annotation instead of labelling from scratch.
-- **Findings on the author's checked labels (6,149 clauses):** NER micro P/R/F1 0.75/0.61/0.675 for the dictionary and 0.73/0.60/0.659 for Task 2's model, far below the 0.96 and 0.91 on the hand-written sentences, so a model trained on dictionary labels does not beat the dictionary on real reviews. A model trained on the checked main-set clauses instead reaches 0.77/0.73/0.746 on the checked pilot, against 0.671 for the dictionary and 0.652 for Task 2's model: annotated data, not more dictionary labels, is what improves NER. Aspect detection 0.89/0.65/0.75: what the system finds is mostly right, but it misses a third of the opinions. On matched opinions, sentiment macro-F1 is 0.60, condition 0.50 and negation 0.76; macro-F1 weighs the rare classes (neutral; condition and exception, 47 of 2,297) as much as the common ones. Tuple-level P/R/F1 (aspect, sentiment, holder, context, condition) is 0.73/0.54/0.62.
-- **Contextual matching:** 10 requests written before any candidate was seen ("Recommend a quick dinner for my children.", "A dessert for my guests."), each for a member whose history has opinions of that holder. They were written by the LLM that helped build the pipeline, not by the author, so they are not manually authored in the brief's sense. The top 10 recipes of five methods (combined with the contextual or the context-independent profile, content only, CF, popularity) are pooled (292 candidates in the Kaggle run, shuffled, methods hidden), and an LLM judges each one 0, 1 or 2 in a fixed JSON schema: Qwen3-14B (Apache-2.0) in 4-bit on a GPU, or Task 5's Qwen3-4B without one; neither takes part in the ranking. It judges from the request, the member's quoted earlier opinions and the recipe's record (2 only when the recipe clearly suits the person or occasion named and does not conflict with those opinions). NDCG@10 and Recall@10 are computed from these judgments. They are LLM judgments, not the human, independent assessment the brief describes. `relevance_sheet.csv` keeps the judgments and `relevance_key.csv` the rankings.
-- **Contextual matching results (judged by Qwen3-14B, Kaggle run):** every candidate already meets the request's checkable constraints, so the rubric gives 2 only when the recipe clearly suits the person or occasion named. The judge rated 179 of the 292 candidates fully relevant (2), 95 partly (1) and 18 not (0); Qwen3-4B, with the same rubric, rated 75% fully relevant and could not separate the methods (all 0.83-0.87 NDCG@10). NDCG@10 (Recall@10): content only 0.849 (0.372), combined with the contextual profile 0.773 (0.355), combined with the context-independent profile 0.732 (0.346), popularity 0.699 (0.334) and CF 0.673 (0.326). The contextual profile lifts the combination by 0.04 NDCG@10 over the context-independent one, the direction the project predicts, but on 10 requests, with LLM judgments and no significance test, this is suggestive, not shown. Content only ranks first, probably in part because the judge sees what the content score uses (the request and the recipe's title and tags; the content score matches the request's words, plus "kid friendly" for children or "party crowd" for guests, against them); CF and popularity, which ignore the request, rank last.
-- **Topics:** the author (a second rater is optional) fills Task 3's `topics_for_human_rating_*.csv` (as `topic_ratings_A.csv`); the script reports mean interpretability per model, with agreement when there are two raters. Explanations are checked automatically in Task 9.
-- **Status table** (`evaluation_status.csv`): every metric of the protocol, the value measured so far and what is still missing. The values below are from the Kaggle run (GPU); the trained models (Task 2's NER model, the checked-label NER model, the LLMs) give slightly different numbers on other hardware.
-
-| Area | Metric | Measured so far | Still needed |
-|---|---|---|---|
-| Annotation | clauses checked by the author | all 6,149 clauses of 1,200 reviews | double annotation and agreement (one annotator) |
-| NER | entity-level P/R/F1 | checked labels: micro F1 dictionary 0.675, Task 2 model 0.659; on the pilot, a model trained on the checked main set 0.746 vs dictionary 0.671 (41 hand-written sentences: 0.96, 0.91) | |
-| Sentiment | macro-F1 | checked labels: 0.60 (45 hand-written reviews: ABSA model 0.87, lexicon 0.97) | |
-| Conditions | macro-F1 | checked labels: condition 0.50, negation 0.76 (challenge set: 32 of 32 sentences) | |
-| Relation extraction | tuple-level F1 | checked labels: 0.62 (P 0.73, R 0.54) (47 gold mentions, tuple accuracy: rules 0.94, LLM 0.68) | |
-| Topics | coherence, diversity, human ratings | NPMI / diversity: LDA 0.077 / 0.67, NMF 0.060 / 0.94, BERTopic 0.077 / 0.36; the author's interpretability (1-3): NMF 2.67, BERTopic 2.60, LDA 2.33 | |
-| Recommendation | NDCG@10, Recall@10 | chronological, popularity-matched: combined 0.18, CF 0.17, popularity 0.14 | |
-| Contextual matching | NDCG@10, Recall@10 | judged by Qwen3-14B, 10 requests: content only 0.85, combined with the contextual profile 0.77, combined with the context-independent profile 0.73, popularity 0.70, CF 0.67 (NDCG@10) | human relevance judgments; more requests for a significance test |
-| Explanations | evidence support, incorrect-attribution rate | support 1.00 everywhere; incorrect attribution 0.40 (generated summaries), 0.19 (generated explanations), 0.12 (context-blind template), 0 (extractive, template) | |
-
-**Does keeping holders and conditions help?** Profiles: a profile that ignores them would claim 13 stable general preferences that the members' own opinions do not support (Task 7). Explanations: a template explanation built from such a profile credits 12% of the opinions it cites to the wrong person, against none when they are kept (Task 9). Recommendation: suggestive only. The chronological test cannot see context, and the two profiles tie there (Task 8). On the 10 requests judged by Qwen3-14B, the contextual profile lifts the combined ranking by 0.04 NDCG@10 (0.773 against 0.732), but 10 requests and LLM judgments cannot establish it, and the content score alone ranks higher than either combination.
-
-The small sets written alongside the systems (Tasks 2, 4, 5 and 6) favour them: on 1,200 real reviews every score drops. The pre-annotation comes from the same model family that designed the system, so scores against it may be optimistic. The author's check removes the errors it finds, but checked labels still lean towards the pre-annotation they started from.
+The original repository has no license file, so all rights remain with the original author.
